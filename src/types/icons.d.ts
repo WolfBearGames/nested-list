@@ -2,4 +2,5 @@
 declare module '@codexteam/icons' {
   export const IconListBulleted: string;
   export const IconListNumbered: string;
+  export const IconChecklist: string;
 }

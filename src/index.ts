@@ -9,7 +9,11 @@ import { isHtmlElement } from './utils/type-guards';
 
 import * as Dom from './utils/dom';
 import Caret from './utils/caret';
-import { IconListBulleted, IconListNumbered } from '@codexteam/icons';
+import {
+  IconListBulleted,
+  IconListNumbered,
+  IconChecklist,
+} from '@codexteam/icons';
 
 /**
  * Build styles
@@ -19,7 +23,7 @@ import './../styles/index.pcss';
 /**
  * list style to make list as ordered or unordered
  */
-type ListDataStyle = 'ordered' | 'unordered';
+type ListDataStyle = 'ordered' | 'unordered' | 'checklist';
 
 /**
  * Output data
@@ -47,6 +51,8 @@ interface ListItem {
    * sublist items
    */
   items: ListItem[];
+
+  checked: boolean|null;
 }
 
 /**
@@ -76,8 +82,10 @@ interface NestedListCssClasses {
   wrapper: string;
   wrapperOrdered: string;
   wrapperUnordered: string;
+  wrapperChecklist: string;
   item: string;
   itemBody: string;
+  itemCheckbox: string;
   itemContent: string;
   itemChildren: string;
   settingsWrapper: string;
@@ -182,7 +190,11 @@ export default class NestedList {
      * Set the default list style from the config.
      */
     this.defaultListStyle =
-      this.config?.defaultStyle === 'ordered' ? 'ordered' : 'unordered';
+      this.config?.defaultStyle === 'ordered'
+        ? 'ordered'
+        : this.config?.defaultStyle === 'checklist'
+        ? 'checklist'
+        : 'unordered';
 
     const initialData = {
       style: this.defaultListStyle,
@@ -216,6 +228,7 @@ export default class NestedList {
           {
             content: '',
             items: [],
+            checked: null,
           },
         ],
         this.nodes.wrapper
@@ -229,7 +242,9 @@ export default class NestedList {
         (event) => {
           switch (event.key) {
             case 'Enter':
-              this.enterPressed(event);
+              if (!event.shiftKey) {
+                this.enterPressed(event);
+              }
               break;
             case 'Backspace':
               this.backspace(event);
@@ -244,6 +259,10 @@ export default class NestedList {
           }
         },
         false
+      );
+
+      this.nodes.wrapper.addEventListener('click', (event) =>
+        this.listClicked(event)
       );
     }
 
@@ -267,6 +286,11 @@ export default class NestedList {
         name: 'ordered' as const,
         label: this.api.i18n.t('Ordered'),
         icon: IconListNumbered,
+      },
+      {
+        name: 'checklist' as const,
+        label: this.api.i18n.t('Checklist'),
+        icon: IconChecklist,
       },
     ];
 
@@ -355,6 +379,7 @@ export default class NestedList {
         return {
           content,
           items: subItems,
+          checked: null,
         };
       });
     };
@@ -374,7 +399,7 @@ export default class NestedList {
    */
   appendItems(items: ListItem[], parentItem: Element): void {
     items.forEach((item) => {
-      const itemEl = this.createItem(item.content, item.items);
+      const itemEl = this.createItem(item.content,item.checked, item.items);
 
       parentItem.appendChild(itemEl);
     });
@@ -387,14 +412,21 @@ export default class NestedList {
    * @param {ListItem[]} [items] - children
    * @returns {Element}
    */
-  createItem(content: string, items: ListItem[] = []): Element {
+  createItem(content: string, checked: boolean|null = null, items: ListItem[] = []): Element {
     const itemWrapper = Dom.make('li', this.CSS.item);
     const itemBody = Dom.make('div', this.CSS.itemBody);
+    const itemCheckbox = Dom.make('div', this.CSS.itemCheckbox);
     const itemContent = Dom.make('div', this.CSS.itemContent, {
-      innerHTML: content,
       contentEditable: (!this.readOnly).toString(),
     });
 
+    itemContent.innerHTML = content;
+
+    if(checked === true){
+      itemCheckbox.classList.add("checked");
+    }
+
+    itemBody.appendChild(itemCheckbox);
     itemBody.appendChild(itemContent);
     itemWrapper.appendChild(itemBody);
 
@@ -428,10 +460,12 @@ export default class NestedList {
       return children.map((el) => {
         const subItemsWrapper = el.querySelector(`.${this.CSS.itemChildren}`);
         const content = this.getItemContent(el);
+        const checked = this.getItemChecked(el);
         const subItems = subItemsWrapper ? getItems(subItemsWrapper) : [];
 
         return {
           content,
+          checked: checked,
           items: subItems,
         };
       });
@@ -477,7 +511,7 @@ export default class NestedList {
   ): HTMLOListElement | HTMLUListElement {
     const tag = style === 'ordered' ? 'ol' : 'ul';
     const styleClass =
-      style === 'ordered' ? this.CSS.wrapperOrdered : this.CSS.wrapperUnordered;
+      style === 'ordered' ? this.CSS.wrapperOrdered : style === 'unordered' ? this.CSS.wrapperUnordered : this.CSS.wrapperChecklist;
 
     classes.push(styleClass);
 
@@ -499,8 +533,10 @@ export default class NestedList {
       wrapper: 'cdx-nested-list',
       wrapperOrdered: 'cdx-nested-list--ordered',
       wrapperUnordered: 'cdx-nested-list--unordered',
+      wrapperChecklist: 'cdx-nested-list--checklist',
       item: 'cdx-nested-list__item',
       itemBody: 'cdx-nested-list__item-body',
+      itemCheckbox: 'cdx-nested-list__item-checkbox',
       itemContent: 'cdx-nested-list__item-content',
       itemChildren: 'cdx-nested-list__item-children',
       settingsWrapper: 'cdx-nested-list__settings',
@@ -550,6 +586,7 @@ export default class NestedList {
     lists.forEach((list) => {
       list.classList.toggle(this.CSS.wrapperUnordered, style === 'unordered');
       list.classList.toggle(this.CSS.wrapperOrdered, style === 'ordered');
+      list.classList.toggle(this.CSS.wrapperChecklist, style === 'checklist');
     });
 
     /**
@@ -1103,6 +1140,7 @@ export default class NestedList {
             {
               content,
               items: [],
+              checked: null,
             },
           ],
           style: 'unordered',
@@ -1110,4 +1148,31 @@ export default class NestedList {
       },
     };
   }
+
+  listClicked(event: MouseEvent): void {
+    //event.preventDefault();
+    const target = event.target as HTMLElement;
+    if (!target) {
+      return;
+    }
+
+    const itemCheckbox = target.closest(`.${this.CSS.itemCheckbox}`);
+
+    if (!itemCheckbox) {
+      return;
+    }
+    itemCheckbox.classList.toggle('checked');
+  }
+
+  getItemChecked(item: Element): boolean|null {
+    if(this.listStyle !== 'checklist') {
+      return null;
+    }
+    const checkbox = item.querySelector(`.${this.CSS.itemCheckbox}`);
+    if(!checkbox) {
+      return null;
+    }
+    return checkbox.classList.contains('checked');
+  }
+
 }

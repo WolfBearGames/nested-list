@@ -45,6 +45,10 @@ export function fragmentToString(fragment: DocumentFragment): string {
 
   div.appendChild(fragment);
 
+  if (!div.innerText.trim()) {
+    return '';
+  }
+
   return div.innerHTML;
 }
 
